@@ -2,65 +2,91 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Capybara Clicker: Skins & Skills</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+<title>capybara clicker</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
+<style>
 body {
     margin: 0;
-    background: #79c267;
     font-family: 'Press Start 2P', cursive;
     text-align: center;
-    image-rendering: pixelated;
+    background: linear-gradient(-45deg, #79c267, #5dbb63, #4fae57, #6dd16a);
+    background-size: 400% 400%;
+    animation: gradient 15s ease infinite;
+    overflow-x: hidden;
 }
 
-h1 { font-size: 16px; margin-top: 15px; }
+@keyframes gradient {
+    0% {background-position:0% 50%}
+    50% {background-position:100% 50%}
+    100% {background-position:0% 50%}
+}
 
-#score { margin: 10px; font-size: 12px; }
+h1 { margin-top:20px; font-size:18px; }
+#score { margin:15px; font-size:12px; }
 
 #capy {
-    width: 200px;
-    cursor: pointer;
-    animation: idle 2s infinite ease-in-out;
+    width:220px;
+    cursor:pointer;
+    image-rendering:pixelated;
     transition: transform 0.1s;
+    filter: drop-shadow(0 10px 10px rgba(0,0,0,0.4));
 }
 
-@keyframes idle {
-    0%,100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
+.goldenGlow {
+    animation: goldenPulse 0.6s infinite alternate;
+}
+
+@keyframes goldenPulse {
+    from { filter: drop-shadow(0 0 5px gold); }
+    to { filter: drop-shadow(0 0 25px gold); }
 }
 
 .panel {
-    background: #f5deb3;
-    border: 4px solid #5a3d25;
-    padding: 10px;
-    margin: 10px auto;
-    width: 320px;
+    background:#f5deb3;
+    border:4px solid #5a3d25;
+    border-radius:8px;
+    padding:12px;
+    margin:15px auto;
+    width:340px;
+    box-shadow:0 8px 0 #3b2616;
 }
 
 button {
-    width: 100%;
-    padding: 8px;
-    margin-top: 5px;
-    font-family: inherit;
-    font-size: 9px;
-    background: #b97a56;
-    border: 3px solid #3b2616;
-    cursor: pointer;
+    width:100%;
+    padding:10px;
+    margin-top:6px;
+    font-family:inherit;
+    font-size:9px;
+    background:#b97a56;
+    border:3px solid #3b2616;
+    cursor:pointer;
 }
 
-button:hover { background: #8c5a3c; }
+button:hover { background:#8c5a3c; transform:translateY(-2px); }
+button:disabled { background:#777; }
+.selected { background:#5fa8ff !important; box-shadow:0 0 10px #5fa8ff; }
 
-.selected { background: #5fa8ff; }
+.popup {
+    position:absolute;
+    color:white;
+    font-size:10px;
+    pointer-events:none;
+    animation:floatUp 0.8s forwards;
+}
 
-.small { font-size: 8px; }
+@keyframes floatUp {
+    from {opacity:1; transform:translateY(0);}
+    to {opacity:0; transform:translateY(-40px);}
+}
 </style>
 </head>
 <body>
 
-<h1>Capybara Clicker</h1>
-<div id="score">Capybaras: 0</div>
-<img id="capy" src="https://i.imgur.com/4AiXzf8.png">
+<h1>capybara clicker</h1>
+<div id="score"></div>
+
+<img id="capy">
 
 <div class="panel">
 <h3>Skins</h3>
@@ -75,106 +101,143 @@ button:hover { background: #8c5a3c; }
 <script>
 let score = 0;
 let baseClick = 1;
+let autoClick = 0;
 let skillPoints = 0;
+let levelsUnlocked = 0;
 let currentSkin = "classic";
+let goldenActive = false;
 
 const skins = {
-    classic: { cost: 0, bonus: 1, img: "https://i.imgur.com/4AiXzf8.png" },
-    golden: { cost: 500, bonus: 2, img: "https://i.imgur.com/Z6X7K9C.png" },
-    jungle: { cost: 2000, bonus: 3, img: "https://i.imgur.com/QCNbOAo.png" }
-};
-
-const skillTree = {
-    power1: { name: "Strong Paws", cost: 1, effect: () => baseClick += 1, bought: false },
-    power2: { name: "Mighty Teeth", cost: 2, effect: () => baseClick += 2, bought: false },
-    efficiency: { name: "Efficient Grazing", cost: 3, effect: () => baseClick *= 2, bought: false }
+    classic: {
+        cost:0, bonus:1, owned:true,
+        frames:["https://i.imgur.com/4AiXzf8.png"],
+        speed:500,
+        clickScale:0.9
+    },
+    golden: {
+        cost:500, bonus:2, owned:false,
+        frames:["https://i.imgur.com/Z6X7K9C.png"],
+        speed:300,
+        clickScale:0.85
+    }
 };
 
 const capy = document.getElementById("capy");
 
-capy.onclick = () => {
-    let bonus = skins[currentSkin].bonus;
-    score += baseClick * bonus;
-    capy.style.transform = "scale(0.9)";
-    setTimeout(() => capy.style.transform = "", 100);
+let frameIndex=0;
+let animInterval;
+
+function startAnimation(){
+    clearInterval(animInterval);
+    animInterval=setInterval(()=>{
+        const frames=skins[currentSkin].frames;
+        frameIndex=(frameIndex+1)%frames.length;
+        capy.src=frames[frameIndex];
+    },skins[currentSkin].speed);
+}
+
+function spawnGolden(){
+    if(goldenActive) return;
+    if(Math.random()<0.05){
+        goldenActive=true;
+        capy.classList.add("goldenGlow");
+        capy.src="https://i.imgur.com/Z6X7K9C.png";
+
+        setTimeout(()=>{
+            goldenActive=false;
+            capy.classList.remove("goldenGlow");
+            startAnimation();
+        },6000);
+    }
+}
+
+setInterval(spawnGolden,15000);
+
+capy.onclick=(event)=>{
+    let multiplier=goldenActive?25:1;
+    let gain=baseClick*skins[currentSkin].bonus*multiplier;
+    score+=gain;
+
+    capy.style.transform="scale("+skins[currentSkin].clickScale+")";
+    setTimeout(()=>capy.style.transform="scale(1)",100);
+
+    createPopup(event.pageX,event.pageY,gain);
     checkLevel();
     update();
 };
 
-function checkLevel() {
-    if (score >= 1000) {
-        skillPoints = Math.floor(score / 1000);
+function createPopup(x,y,value){
+    let popup=document.createElement("div");
+    popup.className="popup";
+    popup.innerText="+"+value;
+    popup.style.left=x+"px";
+    popup.style.top=y+"px";
+    document.body.appendChild(popup);
+    setTimeout(()=>popup.remove(),800);
+}
+
+function checkLevel(){
+    let newLevel=Math.floor(score/1000);
+    if(newLevel>levelsUnlocked){
+        skillPoints+=(newLevel-levelsUnlocked);
+        levelsUnlocked=newLevel;
     }
 }
 
-function renderSkins() {
-    const container = document.getElementById("skins");
-    container.innerHTML = "";
-    for (let key in skins) {
-        const s = skins[key];
-        const btn = document.createElement("button");
-        btn.innerHTML = key.toUpperCase() + "<br><span class='small'>Cost: " + s.cost + "</span>";
-        if (currentSkin === key) btn.classList.add("selected");
+function renderSkins(){
+    const container=document.getElementById("skins");
+    container.innerHTML="";
+    for(let key in skins){
+        const s=skins[key];
+        const btn=document.createElement("button");
+        btn.innerHTML=key.toUpperCase()+"<br><span class='small'>"+
+        (s.owned?"Owned":"Cost: "+s.cost)+"</span>";
+        if(currentSkin===key)btn.classList.add("selected");
 
-        btn.onclick = () => {
-            if (score >= s.cost || key === "classic") {
-                score -= s.cost;
-                currentSkin = key;
-                capy.src = s.img;
-                update();
+        btn.onclick=()=>{
+            if(!s.owned&&score>=s.cost){
+                score-=s.cost;
+                s.owned=true;
             }
+            if(s.owned){
+                currentSkin=key;
+                frameIndex=0;
+                startAnimation();
+            }
+            update();
         };
         container.appendChild(btn);
     }
 }
 
-function renderSkills() {
-    const container = document.getElementById("skills");
-    container.innerHTML = "";
-    for (let key in skillTree) {
-        const skill = skillTree[key];
-        const btn = document.createElement("button");
-        btn.innerHTML = skill.name + "<br><span class='small'>Cost: " + skill.cost + " SP</span>";
-        if (skill.bought) btn.disabled = true;
-
-        btn.onclick = () => {
-            if (skillPoints >= skill.cost && !skill.bought) {
-                skillPoints -= skill.cost;
-                skill.effect();
-                skill.bought = true;
-                update();
-            }
-        };
-        container.appendChild(btn);
-    }
-}
-
-function update() {
-    document.getElementById("score").innerText =
-        "Capybaras: " + Math.floor(score) + " | Skill Points: " + skillPoints;
+function update(){
+    document.getElementById("score").innerText=
+        "Capybaras: "+Math.floor(score)+" | SP: "+skillPoints;
     renderSkins();
-    renderSkills();
     save();
 }
 
-function save() {
-    localStorage.setItem("capyAdvancedSave", JSON.stringify({
-        score, baseClick, skillPoints, currentSkin, skillTree
+function save(){
+    localStorage.setItem("capySave",JSON.stringify({
+        score,baseClick,autoClick,skillPoints,
+        levelsUnlocked,currentSkin,skins
     }));
 }
 
-function load() {
-    const data = JSON.parse(localStorage.getItem("capyAdvancedSave"));
-    if (!data) return;
-    score = data.score;
-    baseClick = data.baseClick;
-    skillPoints = data.skillPoints;
-    currentSkin = data.currentSkin;
-    Object.assign(skillTree, data.skillTree);
-    capy.src = skins[currentSkin].img;
+function load(){
+    const data=JSON.parse(localStorage.getItem("capySave"));
+    if(!data)return;
+    Object.assign(window,data);
 }
 
+setInterval(()=>{
+    score+=autoClick;
+    checkLevel();
+    update();
+},1000);
+
 load();
+startAnimation();
 update();
 </script>
 
